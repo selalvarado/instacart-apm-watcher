@@ -1,4 +1,4 @@
-import os
+'''import os
 import requests
 from playwright.sync_api import sync_playwright
 
@@ -24,9 +24,9 @@ def check_for_apm():
         browser.close()
         return False, None
 
-check_for_apm()
+check_for_apm()'''
 
-'''import os
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -124,4 +124,4 @@ def main():
         print("APM not found — email sent.")
 
 main()
-'''
+
