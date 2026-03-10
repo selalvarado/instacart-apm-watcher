@@ -1,16 +1,16 @@
-import requests
-from bs4 import BeautifulSoup
+import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import os
+import requests
+from playwright.sync_api import sync_playwright
 
 CAREERS_URL = "https://instacart.careers/current-openings/"
 SENDER_EMAIL = os.environ["SENDER_EMAIL"]
 RECEIVER_EMAIL = os.environ["RECEIVER_EMAIL"]
 EMAIL_PASSWORD = os.environ["EMAIL_PASSWORD"]
 GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-GITHUB_REPO = os.environ["GITHUB_REPO"]  # format: "username/repo-name"
+GITHUB_REPO = os.environ["GITHUB_REPO"]
 
 def send_email(subject, body_html):
     msg = MIMEMultipart("alternative")
@@ -18,49 +18,59 @@ def send_email(subject, body_html):
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECEIVER_EMAIL
     msg.attach(MIMEText(body_html, "html"))
-
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(SENDER_EMAIL, EMAIL_PASSWORD)
         server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
 
 def disable_workflow():
-    """Disables the GitHub Actions workflow so it stops running hourly."""
-    workflow_file = "check_instacart.yml"
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/{workflow_file}/disable"
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/actions/workflows/check_instacart.yml/disable"
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
         "Accept": "application/vnd.github+json"
     }
     response = requests.put(url, headers=headers)
     if response.status_code == 204:
-        print("Workflow disabled successfully — no more checks.")
+        print("Workflow disabled successfully.")
     else:
         print(f"Failed to disable workflow: {response.status_code} {response.text}")
 
 def check_for_apm():
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(CAREERS_URL, headers=headers, timeout=15)
-    response.raise_for_status()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(CAREERS_URL, wait_until="networkidle")
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    full_text = soup.get_text(separator=" ").lower()
+        # Find and click the "Product" section to expand it
+        product_section = page.locator("text=Product").first
+        product_section.click()
 
-    apm_keywords = ["associate product manager", "apm program", "apm "]
-    found = any(kw in full_text for kw in apm_keywords)
+        # Wait for the section to expand
+        page.wait_for_timeout(2000)
 
-    job_link = None
-    for a in soup.find_all("a", href=True):
-        link_text = a.get_text(separator=" ").lower()
-        if any(kw in link_text for kw in apm_keywords):
-            href = a["href"]
-            job_link = href if href.startswith("http") else "https://instacart.careers" + href
-            break
+        # Now grab the full page content
+        content = page.content()
+        text = page.inner_text("body").lower()
 
-    return found, job_link
+        apm_keywords = ["associate product manager", "apm program"]
+        found = any(kw in text for kw in apm_keywords)
+
+        job_link = None
+        if found:
+            # Look for a link containing APM keywords
+            links = page.locator("a").all()
+            for link in links:
+                link_text = link.inner_text().lower()
+                if any(kw in link_text for kw in apm_keywords):
+                    href = link.get_attribute("href")
+                    if href:
+                        job_link = href if href.startswith("http") else "https://instacart.careers" + href
+                    break
+
+        browser.close()
+        return found, job_link
 
 def main():
     found, job_link = check_for_apm()
-
     if found:
         if job_link:
             body = f'<p>It\'s time! 🎉 The Instacart APM program is open.</p><p><a href="{job_link}">Click here to apply</a></p>'
@@ -68,11 +78,10 @@ def main():
             body = f'<p>It\'s time! 🎉 The Instacart APM program appears to be open. <a href="{CAREERS_URL}">Check the careers page.</a></p>'
         send_email("it's time!", body)
         print("APM found — email sent!")
-        disable_workflow()  # 🛑 Stop future checks
+        disable_workflow()
     else:
-        body = "<p>No leads yet xx. The Instacart APM program is not currently listed.</p>"
+        body = "<p>No leads yet. The Instacart APM program is not currently listed.</p>"
         send_email("no leads yet", body)
         print("APM not found — email sent.")
 
-if __name__ == "__main__":
-    main()
+main()
