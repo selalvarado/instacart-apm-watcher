@@ -1,4 +1,32 @@
 import os
+import requests
+from playwright.sync_api import sync_playwright
+
+CAREERS_URL = "https://instacart.careers/current-openings/"
+
+def check_for_apm():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(CAREERS_URL, wait_until="networkidle")
+
+        # Print first 3000 chars of page text
+        print("=== PAGE TEXT ===")
+        print(page.inner_text("body")[:3000])
+
+        # Print all elements containing "Product"
+        print("=== PRODUCT ELEMENTS ===")
+        product_elements = page.locator("text=Product").all()
+        print(f"Found {len(product_elements)} elements with 'Product'")
+        for el in product_elements:
+            print(f"  Tag: {el.evaluate('el => el.tagName')}, Text: {el.inner_text()[:100]}")
+
+        browser.close()
+        return False, None
+
+check_for_apm()
+
+'''import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -96,3 +124,4 @@ def main():
         print("APM not found — email sent.")
 
 main()
+'''
