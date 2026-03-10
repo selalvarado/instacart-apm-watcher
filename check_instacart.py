@@ -40,6 +40,17 @@ def check_for_apm():
         page = browser.new_page()
         page.goto(CAREERS_URL, wait_until="networkidle")
 
+        # Print all clickable text elements to see what's on the page
+        print("=== PAGE TEXT ===")
+        print(page.inner_text("body")[:3000])  # first 3000 chars
+
+        # Print all elements that contain "Product"
+        print("=== PRODUCT ELEMENTS ===")
+        product_elements = page.locator("text=Product").all()
+        print(f"Found {len(product_elements)} elements with 'Product'")
+        for el in product_elements:
+            print(f"  Tag: {el.evaluate('el => el.tagName')}, Text: {el.inner_text()[:100]}")
+
         # Find and click the "Product" section to expand it
         product_section = page.locator("text=Product").first
         product_section.click()
